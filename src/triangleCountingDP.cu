@@ -170,7 +170,7 @@ __global__ void radixSort(
 	// --------------------------------------------------------------------------------------------------------
 	// if the number of elements in this bucket is too small or the next recursion will go below the zeroth bit
 	if(l_num_elems <= LOCAL_SORT_THRESHOLD || ((((int)bitnum_beg[0]-(int)Log2<NUM_BUCKETS>::VALUE))< 0) ) {
-//		printf("LOCAL SORTING for bitnum_beg %d threadIdx.x %d l_offset %d l_num_elems %d \n", bitnum_beg[0], threadIdx.x, l_offset, l_num_elems);
+		printf("LOCAL SORTING for bitnum_beg %d threadIdx.x %d l_offset %d l_num_elems %d \n", bitnum_beg[0], threadIdx.x, l_offset, l_num_elems);
 		DoubleBuffer<Key> d_keys(l_in, l_out);
 		d_temp_storage = NULL;
 		temp_storage_bytes = 0;
@@ -185,6 +185,16 @@ __global__ void radixSort(
 			cudaDeviceSynchronize();
 		}
 		cudaFree((void *) d_temp_storage);
+#if 0
+		printf("CHECKING MEMORY d_out for l_num_elems %d:\n", l_num_elems);
+		for(int i = 0; i < l_num_elems; i++){
+			unsigned int x, y;
+			x = *(unsigned int *)&(d_out[i]);
+			y = *((unsigned int *)&(d_out[i]) + 1);
+			printf("(%d, %d) ", y, x);
+		}
+		printf("\n");
+#endif
 		return;
 	}
 
@@ -832,15 +842,47 @@ int main(int argc, char* argv[])
     std::vector<edge<unsigned int>> EPrime = deployKernel<128, 512>((unsigned long *)dataList.data(), (int)dataList.size());
 
     std::cout<<"Length of EPrime is: "<<EPrime.size()<<std::endl;
-//    for(int i = 0; i < EPrime.size(); i++){
-//    	EPrime[i].print();
-//    	std::cout<<" ";
-//    }
-//    std::cout<<std::endl;
+    for(int i = 0; i < EPrime.size(); i++){
+    	EPrime[i].print();
+    	std::cout<<" ";
+    }
+    std::cout<<std::endl;
 
     // Last stage - perform triangle count on E(dataList) and EPrime and divide the count found by 3 to get the final count
-	//radixSort<int, 128, 1024, 16><<<1, 1>>>(d_in, d_out, d_num_elems, d_offsets, d_bitnum_beg);
-    return 0;
+    // First check if we can simple sort EPrime alone
+	unsigned long *d_E_Prime = NULL;
+	unsigned long *d_E_Prime_sorted = NULL;
+	unsigned int *d_num_elems, *d_offsets, *d_bitnum_beg;
+	int h_bitnum_beg[1] = {(sizeof(unsigned long) * 8) - 1};
+	unsigned int EPrimeSize = EPrime.size();
+
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime, sizeof(unsigned long) * EPrime.size()));
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime_sorted, sizeof(unsigned long) * EPrime.size()));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_bitnum_beg, sizeof(unsigned int)));
+
+	CUDA_CHECK_RETURN(cudaMemcpy(d_E_Prime, EPrime.data(), sizeof(unsigned long) * EPrime.size(), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems, &EPrimeSize, sizeof(unsigned int), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets, 0, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_bitnum_beg, h_bitnum_beg, sizeof(unsigned int), cudaMemcpyHostToDevice));
+
+	radixSort<unsigned long, 128, 1024, 16><<<1, 1>>>(d_E_Prime, d_E_Prime_sorted, d_num_elems, d_offsets, d_bitnum_beg);
+
+//	unsigned long *h_E_Prime_sorted;
+//	h_E_Prime_sorted = new unsigned long[EPrimeSize];
+//	CubDebugExit(cudaMemcpy(h_E_Prime_sorted, d_E_Prime_sorted, sizeof(unsigned long) * EPrimeSize, cudaMemcpyDeviceToHost));
+//	edge<unsigned int> *p;
+//	p = (edge<unsigned int> *)h_E_Prime_sorted;
+//	std::cout<<"Sorted EPrime is: "<<EPrime.size()<<std::endl;
+//	for(int i = 0; i < EPrimeSize; i++){
+//		p[i].print();
+//		std::cout<<" ";
+//	}
+//	std::cout<<std::endl;
+
+
+	return 0;
 }
 
 

@@ -33,7 +33,7 @@ src/%.o: ../src/%.cu
 	@echo 'Building file: $<'
 	@echo 'Invoking: NVCC Compiler'
 	/usr/local/cuda-9.1/bin/nvcc -I"/uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5" -G -g -O0 -std=c++11 -gencode arch=compute_60,code=sm_60  -odir "src" -M -o "$(@:%.o=%.d)" "$<"
-	/usr/local/cuda-9.1/bin/nvcc -I"/uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5" -G -g -O0 -std=c++11 --compile --relocatable-device-code=false -gencode arch=compute_60,code=compute_60 -gencode arch=compute_60,code=sm_60  -x cu -o  "$@" "$<"
+	/usr/local/cuda-9.1/bin/nvcc -I"/uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5" -G -g -O0 -std=c++11 --compile --relocatable-device-code=true -gencode arch=compute_60,code=compute_60 -gencode arch=compute_60,code=sm_60  -x cu -o  "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 

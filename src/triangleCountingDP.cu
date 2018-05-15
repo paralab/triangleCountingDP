@@ -128,7 +128,7 @@ __global__ void moveKernel(
 	}
 }
 
-#define LOCAL_SORT_THRESHOLD 1024*8
+#define LOCAL_COUNT_THRESHOLD 1024
 
 template <
     typename    Key,
@@ -136,11 +136,16 @@ template <
     int         ITEMS_PER_THREAD,
     int			NUM_BUCKETS>
 __global__ void radixSort(
-    Key           *d_in,		// Tile of input
-    Key           *d_out,		// Tile of buffer - this is where the output should be at a particular level/depth finally after the operation is complete
-    unsigned int  *num_elems,	// The total number of elements in the list at this level - array of size NUM_BUCKETS
-    unsigned int  *offsets,		// The offset from d_in where the current bucket starts - array of size NUM_BUCKETS
-    unsigned int  *bitnum_beg	// the bit from which the buckets will be counted
+    Key           *d_in,			// Tile of input
+    Key           *d_out,			// Tile of buffer - this is where the output should be at a particular level/depth finally after the operation is complete
+    unsigned int  *num_elems,		// The total number of elements in the list at this level - array of size NUM_BUCKETS
+    unsigned int  *offsets,			// The offset from d_in where the current bucket starts - array of size NUM_BUCKETS
+    Key           *d_in_ep,			// Tile of input
+    Key           *d_out_ep,		// Tile of buffer - this is where the output should be at a particular level/depth finally after the operation is complete
+    unsigned int  *num_elems_ep,	// The total number of elements in the list at this level - array of size NUM_BUCKETS
+    unsigned int  *offsets_ep,		// The offset from d_in where the current bucket starts - array of size NUM_BUCKETS
+    unsigned int *d_trianglecount,	// The location where the total count is stored
+    unsigned int  *bitnum_beg		// the bit from which the buckets will be counted
     )
 {
 	enum { TILE_SIZE = BLOCK_THREADS * ITEMS_PER_THREAD };
@@ -152,51 +157,55 @@ __global__ void radixSort(
 	unsigned int NUM_THREADS = GRID_SIZE*BLOCK_THREADS;
 	unsigned int *d_scan_in, *d_scan_out;
 	unsigned int *d_next_num_elems, *d_next_offsets, *d_next_bitnum_beg;
+
+	unsigned int l_offset_ep = offsets_ep[threadIdx.x];
+	unsigned int l_num_elems_ep = num_elems_ep[threadIdx.x];
+	Key *l_in_ep = &d_in_ep[l_offset_ep];
+	Key *l_out_ep = &d_out_ep[l_offset_ep];
+	unsigned int GRID_SIZE_EP = (unsigned int)ceilf(((float)l_num_elems_ep)/((float)TILE_SIZE));
+	unsigned int NUM_THREADS_EP = GRID_SIZE_EP*BLOCK_THREADS;
+	unsigned int *d_scan_in_ep, *d_scan_out_ep;
+	unsigned int *d_next_num_elems_ep, *d_next_offsets_ep;
+
 	cudaError_t err;
 
 	// Storage pointers for cubs
 	void *d_temp_storage = NULL;
 	size_t temp_storage_bytes = 0;
 #if 0
-	printf("STARTING radixsort for bitnum_beg %d threadIdx.x %d l_offset %d l_num_elems %d \n", bitnum_beg[0], threadIdx.x, l_offset, l_num_elems);
+	printf("STARTING radixsort for bitnum_beg %d threadIdx.x %d l_offset %d l_num_elems %d l_offset_ep %d l_num_elems_ep %d\n", bitnum_beg[0], threadIdx.x, l_offset, l_num_elems, l_offset_ep, l_num_elems_ep);
 #endif
 
-	if(l_num_elems == 0){
+	if(l_num_elems == 0 || l_num_elems_ep == 0){
 #if 0
 		printf("EXITING bitnum_beg %d threadIdx.x %d l_offset %d l_num_elems %d \n", bitnum_beg[0], threadIdx.x, l_offset, l_num_elems);
 #endif
 		return;
 	}
+
 	// --------------------------------------------------------------------------------------------------------
-	// if the number of elements in this bucket is too small or the next recursion will go below the zeroth bit
-	if(l_num_elems <= LOCAL_SORT_THRESHOLD || ((((int)bitnum_beg[0]-(int)Log2<NUM_BUCKETS>::VALUE))< 0) ) {
-		printf("LOCAL SORTING for bitnum_beg %d threadIdx.x %d l_offset %d l_num_elems %d \n", bitnum_beg[0], threadIdx.x, l_offset, l_num_elems);
-		DoubleBuffer<Key> d_keys(l_in, l_out);
-		d_temp_storage = NULL;
-		temp_storage_bytes = 0;
-		DeviceRadixSort::SortKeys(d_temp_storage, temp_storage_bytes, d_keys, l_num_elems);
-		cudaMalloc(&d_temp_storage, temp_storage_bytes);
-		if(d_temp_storage == NULL){ printf("ERROR: d_temp_storage cudaMalloc failed.\n"); return;}
-		DeviceRadixSort::SortKeys(d_temp_storage, temp_storage_bytes, d_keys, l_num_elems);
-		cudaDeviceSynchronize();
-		//d_out = d_keys.Current();
-		if(d_keys.Current() != l_out){
-			copyKernel<Key, BLOCK_THREADS, ITEMS_PER_THREAD, NUM_BUCKETS><<<GRID_SIZE, BLOCK_THREADS>>>(l_in, l_out, l_num_elems);
-			cudaDeviceSynchronize();
-		}
-		cudaFree((void *) d_temp_storage);
-#if 0
-		printf("CHECKING MEMORY d_out for l_num_elems %d:\n", l_num_elems);
-		for(int i = 0; i < l_num_elems; i++){
-			unsigned int x, y;
-			x = *(unsigned int *)&(d_out[i]);
-			y = *((unsigned int *)&(d_out[i]) + 1);
-			printf("(%d, %d) ", y, x);
-		}
-		printf("\n");
-#endif
+	// if the next recursion will go below the zeroth bit
+	if( (((int)bitnum_beg[0]-(int)Log2<NUM_BUCKETS>::VALUE) + 1) < 0){
+		printf("Counting the elements in d_in_ep...\n");
+		atomicAdd(d_trianglecount, l_num_elems_ep);
 		return;
 	}
+	// if the number of elements in this bucket in e_prime is too small lookup the elements n^2
+	if(l_num_elems_ep < LOCAL_COUNT_THRESHOLD){
+		unsigned int l_triangle_count = 0;
+		for(int i = 0; i < l_num_elems_ep; i++){
+			for(int j = 0; j < l_num_elems; j++){
+				if(l_in_ep[i] == l_in[j]){
+					l_triangle_count++;
+					break;
+				}
+			}
+		}
+		//printf("Local count is %d\n", l_triangle_count);
+		atomicAdd(d_trianglecount, l_triangle_count);
+		return;
+	}
+
 
 	// --------------------------------------------------------------------------------------------------------
 	// Count
@@ -208,7 +217,16 @@ __global__ void radixSort(
 	err = cudaGetLastError();
 	if (err != cudaSuccess){ printf("ERROR: countKernel failed due to err code %d.\n", err); return;}
 
+	// for ep perform the count
+	cudaMalloc((void ** )&d_scan_in_ep, sizeof(unsigned int)*NUM_THREADS_EP*NUM_BUCKETS);
+	if(d_scan_in_ep == NULL){ printf("ERROR: d_scan_in_ep cudaMalloc failed.\n"); return;}
+	countKernel<Key, BLOCK_THREADS, ITEMS_PER_THREAD, NUM_BUCKETS><<<GRID_SIZE_EP, BLOCK_THREADS>>>(l_in_ep, d_scan_in_ep, l_num_elems_ep, bitnum_beg[0]);
+
+	err = cudaGetLastError();
+	if (err != cudaSuccess){ printf("ERROR: countKernel failed due to err code %d.\n", err); return;}
+
 	cudaDeviceSynchronize();
+
 
 	// prefix inclusive sum scan
 	cudaMalloc((void ** )&d_scan_out, sizeof(unsigned int)*NUM_THREADS*NUM_BUCKETS);
@@ -226,12 +244,35 @@ __global__ void radixSort(
 	cudaDeviceSynchronize();
 	cudaFree((void *) d_temp_storage);
 
+	// prefix inclusive sum scan for ep
+	cudaMalloc((void ** )&d_scan_out_ep, sizeof(unsigned int)*NUM_THREADS_EP*NUM_BUCKETS);
+	if(d_scan_out == NULL){ printf("ERROR: d_scan_out_ep cudaMalloc failed.\n"); return;}
+	d_temp_storage = NULL;
+	temp_storage_bytes = 0;
+	DeviceScan::InclusiveSum(d_temp_storage, temp_storage_bytes, d_scan_in_ep, d_scan_out_ep, NUM_THREADS_EP*NUM_BUCKETS);
+//	printf("Scan temp_storage %d\n", temp_storage_bytes);
+	cudaMalloc(&d_temp_storage, temp_storage_bytes);
+	if(d_temp_storage == NULL){ printf("ERROR: d_temp_storage for ep cudaMalloc failed.\n"); return;}
+	DeviceScan::InclusiveSum(d_temp_storage, temp_storage_bytes, d_scan_in_ep, d_scan_out_ep, NUM_THREADS_EP*NUM_BUCKETS);
+	err = cudaGetLastError();
+	if (err != cudaSuccess){ printf("ERROR: DeviceScan::InclusiveSum failed due to err code %d.\n", err); return;}
+
+	cudaDeviceSynchronize();
+	cudaFree((void *) d_temp_storage);
+
+
 	// --------------------------------------------------------------------------------------------------------
 	// Bucket/move
 	moveKernel<Key, BLOCK_THREADS, ITEMS_PER_THREAD, NUM_BUCKETS><<<GRID_SIZE, BLOCK_THREADS>>>(l_in, l_out, d_scan_out, l_num_elems, bitnum_beg[0]);
 	err = cudaGetLastError();
 	if (err != cudaSuccess){ printf("ERROR: moveKernel failed due to err code %d.\n", err); return;}
 	cudaDeviceSynchronize();
+	// bucketmove for ep
+	moveKernel<Key, BLOCK_THREADS, ITEMS_PER_THREAD, NUM_BUCKETS><<<GRID_SIZE_EP, BLOCK_THREADS>>>(l_in_ep, l_out_ep, d_scan_out_ep, l_num_elems_ep, bitnum_beg[0]);
+	err = cudaGetLastError();
+	if (err != cudaSuccess){ printf("ERROR: moveKernel for ep failed due to err code %d.\n", err); return;}
+	cudaDeviceSynchronize();
+
 
 	// --------------------------------------------------------------------------------------------------------
 	// Recurse
@@ -263,16 +304,45 @@ __global__ void radixSort(
 	cudaFree((void *) d_scan_in);
 	cudaFree((void *) d_scan_out);
 
+	// get recurse ready for ep
+	unsigned int l_bucket_scan_ep[NUM_BUCKETS] = {0};								// for the buckets get the last element of d_scan_out
+	cudaMalloc((void ** )&d_next_num_elems_ep, sizeof(unsigned int)*NUM_BUCKETS);	// to get this for each value in l_bucket_scan subtract the previous value from it except for the first
+	cudaMalloc((void ** )&d_next_offsets_ep, sizeof(unsigned int)*NUM_BUCKETS); 	// for this convert the l_bucket_scan from inclusive to exclusive
+
+	if(d_next_num_elems_ep == NULL){ printf("ERROR: d_next_num_elems_ep cudaMalloc failed.\n"); return;}
+	if(d_next_offsets_ep == NULL){ printf("ERROR: d_next_offsets_ep cudaMalloc failed.\n"); return;}
+
+	err = cudaGetLastError();
+	if (err != cudaSuccess){ printf("ERROR: mallocs for d_next_*_ep failed due to err code %d.\n", err); return;}
+
+	for(int j = 0; j < NUM_BUCKETS; j++){
+		l_bucket_scan_ep[j] = d_scan_out_ep[j*NUM_THREADS_EP+(NUM_THREADS_EP-1)];
+		if(j == 0){
+			d_next_num_elems_ep[j] = l_bucket_scan_ep[j];
+			d_next_offsets_ep[j] = 0;
+		}else{
+			d_next_num_elems_ep[j] = l_bucket_scan_ep[j] - l_bucket_scan_ep[j-1];
+			d_next_offsets_ep[j] = l_bucket_scan_ep[j-1];
+		}
+	}
+
+	// Free all but the next element arrays
+	cudaFree((void *) d_scan_in_ep);
+	cudaFree((void *) d_scan_out_ep);
+
+
 	// actually recurse by calling multiple kernels - the l_in and l_out buffers ought to be reversed for the next iteration
-	radixSort<Key, BLOCK_THREADS, ITEMS_PER_THREAD, NUM_BUCKETS><<<1, NUM_BUCKETS>>>(l_out, l_in, d_next_num_elems, d_next_offsets, d_next_bitnum_beg);
+	//radixSort<Key, BLOCK_THREADS, ITEMS_PER_THREAD, NUM_BUCKETS><<<1, NUM_BUCKETS>>>(l_out, l_in, d_next_num_elems, d_next_offsets, d_next_bitnum_beg);
+	radixSort<Key, BLOCK_THREADS, ITEMS_PER_THREAD, NUM_BUCKETS><<<1, NUM_BUCKETS>>>(l_out, l_in, d_next_num_elems, d_next_offsets, l_out_ep, l_in_ep, d_next_num_elems_ep, d_next_offsets_ep, d_trianglecount, d_next_bitnum_beg);
 	err = cudaGetLastError();
 	if (err != cudaSuccess){ printf("ERROR: radixSort failed due to err code %d.\n", err); return;}
 	cudaDeviceSynchronize();
+
 	// The result will be l_in now. It needs to be moved back into l_out
-	copyKernel<Key, BLOCK_THREADS, ITEMS_PER_THREAD, NUM_BUCKETS><<<GRID_SIZE, BLOCK_THREADS>>>(l_in, l_out, l_num_elems);
-	err = cudaGetLastError();
-	if (err != cudaSuccess){ printf("ERROR: copyKernel failed due to err code %d.\n", err); return;}
-	cudaDeviceSynchronize();
+//	copyKernel<Key, BLOCK_THREADS, ITEMS_PER_THREAD, NUM_BUCKETS><<<GRID_SIZE, BLOCK_THREADS>>>(l_in, l_out, l_num_elems);
+//	err = cudaGetLastError();
+//	if (err != cudaSuccess){ printf("ERROR: copyKernel failed due to err code %d.\n", err); return;}
+//	cudaDeviceSynchronize();
 	return;
 }
 
@@ -852,22 +922,43 @@ int main(int argc, char* argv[])
     // First check if we can simple sort EPrime alone
 	unsigned long *d_E_Prime = NULL;
 	unsigned long *d_E_Prime_sorted = NULL;
-	unsigned int *d_num_elems, *d_offsets, *d_bitnum_beg;
+	unsigned int *d_num_elems_ep, *d_offsets_ep, *d_bitnum_beg;
 	int h_bitnum_beg[1] = {(sizeof(unsigned long) * 8) - 1};
 	unsigned int EPrimeSize = EPrime.size();
 
 	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime, sizeof(unsigned long) * EPrime.size()));
 	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime_sorted, sizeof(unsigned long) * EPrime.size()));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems_ep, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets_ep, sizeof(unsigned int)));
 	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_bitnum_beg, sizeof(unsigned int)));
 
 	CUDA_CHECK_RETURN(cudaMemcpy(d_E_Prime, EPrime.data(), sizeof(unsigned long) * EPrime.size(), cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems, &EPrimeSize, sizeof(unsigned int), cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets, 0, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems_ep, &EPrimeSize, sizeof(unsigned int), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets_ep, 0, sizeof(unsigned int)));
 	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_bitnum_beg, h_bitnum_beg, sizeof(unsigned int), cudaMemcpyHostToDevice));
 
-	radixSort<unsigned long, 128, 1024, 16><<<1, 1>>>(d_E_Prime, d_E_Prime_sorted, d_num_elems, d_offsets, d_bitnum_beg);
+	unsigned long *d_E = NULL;
+	unsigned long *d_E_sorted = NULL;
+	unsigned int *d_num_elems, *d_offsets;
+	unsigned int ESize = dataList.size();
+
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E, sizeof(unsigned long) * ESize));
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_sorted, sizeof(unsigned long) * ESize));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets, sizeof(unsigned int)));
+
+	CUDA_CHECK_RETURN(cudaMemcpy(d_E, dataList.data(), sizeof(unsigned long) * ESize, cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems, &ESize, sizeof(unsigned int), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets, 0, sizeof(unsigned int)));
+
+	unsigned int *d_triangleCount;
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_triangleCount, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMemset((void * )d_triangleCount, 0, sizeof(unsigned int)));
+
+	CUDA_CHECK_RETURN(cudaDeviceSetLimit(cudaLimitDevRuntimeSyncDepth, 14));
+
+	//radixSort<unsigned long, 128, 1024, 16><<<1, 1>>>(d_E_Prime, d_E_Prime_sorted, d_num_elems, d_offsets, d_bitnum_beg);
+	radixSort<unsigned  long, 128, 1024, 16><<<1, 1>>>(d_E, d_E_sorted, d_num_elems, d_offsets, d_E_Prime, d_E_Prime_sorted, d_num_elems_ep, d_offsets_ep, d_triangleCount, d_bitnum_beg);
 
 //	unsigned long *h_E_Prime_sorted;
 //	h_E_Prime_sorted = new unsigned long[EPrimeSize];
@@ -881,6 +972,10 @@ int main(int argc, char* argv[])
 //	}
 //	std::cout<<std::endl;
 
+	unsigned int h_triangleCount;
+	CubDebugExit(cudaMemcpy(&h_triangleCount, d_triangleCount, sizeof(unsigned int), cudaMemcpyDeviceToHost));
+
+	std::cout<<"The final triangle count is: "<<h_triangleCount<<std::endl;
 
 	return 0;
 }

@@ -121,7 +121,16 @@ src/triangleCountingDP.o : ../src/triangleCountingDP.cu \
     /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/texture_indirect_functions.h \
     /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/surface_indirect_functions.h \
     /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/device_launch_parameters.h \
-    /usr/include/c++/4.8.2/iostream \
+    /usr/include/c++/4.8.2/numeric \
+    /usr/include/c++/4.8.2/bits/stl_iterator_base_types.h \
+    /usr/include/c++/4.8.2/type_traits \
+    /usr/include/c++/4.8.2/bits/stl_numeric.h \
+    /usr/include/c++/4.8.2/bits/concept_check.h \
+    /usr/include/c++/4.8.2/debug/debug.h \
+    /usr/include/c++/4.8.2/bits/move.h \
+    /usr/include/c++/4.8.2/iterator \
+    /usr/include/c++/4.8.2/bits/stl_iterator_base_funcs.h \
+    /usr/include/c++/4.8.2/bits/stl_iterator.h \
     /usr/include/c++/4.8.2/ostream \
     /usr/include/c++/4.8.2/ios \
     /usr/include/c++/4.8.2/iosfwd \
@@ -135,13 +144,6 @@ src/triangleCountingDP.o : ../src/triangleCountingDP.cu \
     /usr/include/c++/4.8.2/bits/functexcept.h \
     /usr/include/c++/4.8.2/ext/numeric_traits.h \
     /usr/include/c++/4.8.2/bits/stl_pair.h \
-    /usr/include/c++/4.8.2/bits/move.h \
-    /usr/include/c++/4.8.2/bits/concept_check.h \
-    /usr/include/c++/4.8.2/type_traits \
-    /usr/include/c++/4.8.2/bits/stl_iterator_base_types.h \
-    /usr/include/c++/4.8.2/bits/stl_iterator_base_funcs.h \
-    /usr/include/c++/4.8.2/debug/debug.h \
-    /usr/include/c++/4.8.2/bits/stl_iterator.h \
     /usr/include/c++/4.8.2/cstdint \
     /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/stdint.h \
     /usr/include/stdint.h \
@@ -200,9 +202,6 @@ src/triangleCountingDP.o : ../src/triangleCountingDP.cu \
     /usr/include/c++/4.8.2/bits/ostream.tcc \
     /usr/include/c++/4.8.2/istream \
     /usr/include/c++/4.8.2/bits/istream.tcc \
-    /usr/include/c++/4.8.2/numeric \
-    /usr/include/c++/4.8.2/bits/stl_numeric.h \
-    /usr/include/c++/4.8.2/iterator \
     /usr/include/c++/4.8.2/bits/stream_iterator.h \
     /usr/include/unistd.h \
     /usr/include/bits/posix_opt.h \
@@ -210,6 +209,7 @@ src/triangleCountingDP.o : ../src/triangleCountingDP.cu \
     /usr/include/bits/confname.h \
     /usr/include/getopt.h \
     ../src/CSVReader.h \
+    /usr/include/c++/4.8.2/iostream \
     /usr/include/c++/4.8.2/fstream \
     /usr/include/c++/4.8.2/bits/codecvt.h \
     /usr/include/c++/4.8.2/x86_64-redhat-linux/bits/basic_file.h \
@@ -255,4 +255,136 @@ src/triangleCountingDP.o : ../src/triangleCountingDP.cu \
     /usr/include/c++/4.8.2/sstream \
     /usr/include/c++/4.8.2/bits/sstream.tcc \
     ../src/graph.h \
-    ../src/utils.h
+    ../src/utils.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/cuda.h \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/cub.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/block_histogram.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/block_histogram_sort.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/block_radix_sort.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/block_exchange.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../util_ptx.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../util_type.cuh \
+    /usr/include/c++/4.8.2/cfloat \
+    /usr/lib/gcc/x86_64-redhat-linux/4.8.5/include/float.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/cuda_fp16.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/cuda_fp16.hpp \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../util_macro.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../util_namespace.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../util_arch.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../util_debug.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/block_radix_rank.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../thread/thread_reduce.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../thread/../thread/thread_operators.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../thread/thread_scan.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../block/block_scan.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../block/specializations/block_scan_raking.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../block/specializations/../../block/block_raking_layout.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../block/specializations/../../warp/warp_scan.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../block/specializations/../../warp/specializations/warp_scan_shfl.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../block/specializations/../../warp/specializations/warp_scan_smem.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../block/specializations/../../warp/specializations/../../thread/thread_load.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../block/specializations/../../warp/specializations/../../thread/thread_store.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/../block/specializations/block_scan_warp_scans.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../block/block_discontinuity.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/block_histogram_atomic.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/block_load.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/../iterator/cache_modified_input_iterator.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/../iterator/../util_device.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/block_reduce.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/block_reduce_raking.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../warp/warp_reduce.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../warp/specializations/warp_reduce_shfl.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/../../warp/specializations/warp_reduce_smem.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/block_reduce_raking_commutative_only.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/specializations/block_reduce_warp_reductions.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/block/block_store.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/device_histogram.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/dispatch_histogram.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/agent_histogram.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/../grid/grid_queue.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../thread/thread_search.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/device_partition.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/dispatch_select_if.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/dispatch_scan.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/agent_scan.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/single_pass_scan_operators.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/agent_select_if.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/device_radix_sort.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/dispatch_radix_sort.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/agent_radix_sort_upsweep.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/agent_radix_sort_downsweep.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../grid/grid_even_share.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../grid/grid_mapping.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/device_reduce.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/../iterator/arg_index_input_iterator.cuh \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/version.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/iterator_facade.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/config.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/simple_defines.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/compiler.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/host_system.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/device_system.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/host_device.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/debug.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/compiler_fence.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/forceinline.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/exec_check_disable.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/config/global_workarounds.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/type_traits.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/type_traits/has_trivial_assign.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/iterator_facade_category.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/host_system_tag.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/system/cpp/detail/execution_policy.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/system/detail/sequential/execution_policy.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/detail/execution_policy.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/device_system_tag.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/system/cuda/detail/execution_policy.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/any_system_tag.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/system/cuda/config.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/iterator_categories.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/iterator_category_with_system_and_traversal.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/iterator_traversal_tags.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/universal_categories.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/is_iterator_category.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/iterator_category_to_traversal.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/iterator_category_to_system.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/distance_from_result.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/iterator_traits.h \
+    /usr/local/cuda-9.1/bin/../targets/x86_64-linux/include/thrust/iterator/detail/iterator_traits.inl \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/dispatch_reduce.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/agent_reduce.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/dispatch_reduce_by_key.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/agent_reduce_by_key.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/../iterator/constant_input_iterator.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/device_run_length_encode.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/dispatch_rle.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/agent_rle.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/device_scan.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/device_segmented_radix_sort.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/device_segmented_reduce.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/device_select.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/device_spmv.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/dispatch_spmv_orig.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/agent_segment_fixup.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/agent_spmv_orig.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/../iterator/counting_input_iterator.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/device/dispatch/../../agent/../iterator/tex_ref_input_iterator.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/iterator/cache_modified_output_iterator.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/iterator/tex_obj_input_iterator.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/iterator/transform_input_iterator.cuh \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/util_allocator.cuh \
+    /usr/include/c++/4.8.2/set \
+    /usr/include/c++/4.8.2/bits/stl_tree.h \
+    /usr/include/c++/4.8.2/bits/stl_set.h \
+    /usr/include/c++/4.8.2/bits/stl_multiset.h \
+    /usr/include/c++/4.8.2/map \
+    /usr/include/c++/4.8.2/bits/stl_map.h \
+    /usr/include/c++/4.8.2/bits/stl_multimap.h \
+    /uufs/chpc.utah.edu/common/home/u0686941/cuda-workspace/triangleCountingDP/cub-1.7.5/cub/host/mutex.cuh \
+    /usr/include/c++/4.8.2/mutex \
+    /usr/include/c++/4.8.2/chrono \
+    /usr/include/c++/4.8.2/ratio \
+    /usr/include/c++/4.8.2/ctime \
+    /usr/include/c++/4.8.2/system_error \
+    /usr/include/c++/4.8.2/x86_64-redhat-linux/bits/error_constants.h

@@ -417,7 +417,7 @@ __global__ void UniqueUblockIndexKernel(
 			scan_offset++;
 		}
 	}
-	// To make sure that the last value is present in each threads write bound d_index
+	// To make sure that the last value is present in each threads write bound d_index - this one should be in another kernel since it needs to sync across blocks but we can just run again
 	__syncthreads();
 	for(unsigned int i = d_scan[scanIdx]; i < scan_offset; i++){
 		if(i != 0){
@@ -578,6 +578,9 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	DeviceRadixSort::SortKeys(d_temp_storage, temp_storage_bytes, d_keys, TILE_SIZE*g_grid_size);
 	d_out = d_keys.Current();
 
+	// This might be required
+	cudaDeviceSynchronize();
+
 #if 0
 	std::cout<<"Copying sorted data to h_in from d_out."<<std::endl;
 	// copy data back to host
@@ -626,6 +629,8 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 
 	err = cudaGetLastError();
 	if (err != cudaSuccess){ printf("ERROR: UniqueUblockCntKernel failed due to err code %d.\n", err); return std::vector<edge<unsigned int>>();}
+	// This might be required
+	cudaDeviceSynchronize();
 
 #if 0
 	unsigned int *h_scan;
@@ -653,8 +658,12 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	CubDebugExit(g_allocator.DeviceAllocate(&d_temp_storage, temp_storage_bytes));
 	// Run
 	CubDebugExit(DeviceScan::ExclusiveSum(d_temp_storage, temp_storage_bytes, d_cnt, d_scan, BLOCK_THREADS*g_grid_size));
+	// This might be required
+	cudaDeviceSynchronize();
+
 	// Free intermediate memory d_temp_storage
 	if (d_temp_storage) CubDebugExit(g_allocator.DeviceFree(d_temp_storage));
+
 #if 0
 	CubDebugExit(cudaMemcpy(h_scan, d_scan, sizeof(unsigned int) * BLOCK_THREADS * g_grid_size, cudaMemcpyDeviceToHost));
 	std::cout<<"The scan of each block is:"<<std::endl;
@@ -664,7 +673,6 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	std::cout<<std::endl;
 
 #endif
-	std::cout<<"4. Allocating arrays for the index, u_block_vertices and the degrees of each. "<<std::endl;
 	// Allocate array of size d_scan[-1]+d_cnt[-1] - its the count of unique vertices including the last MAX_INT vert if present
 	unsigned int *d_index = NULL;
 	unsigned int *d_u_block = NULL;
@@ -673,6 +681,7 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	// to compute the array size we need to copy over the data from the device
 	CubDebugExit(cudaMemcpy(&h_scan_end, &d_scan[BLOCK_THREADS*g_grid_size-1], sizeof(unsigned int), cudaMemcpyDeviceToHost));
 	CubDebugExit(cudaMemcpy(&h_cnt_end, &d_cnt[BLOCK_THREADS*g_grid_size-1], sizeof(unsigned int), cudaMemcpyDeviceToHost));
+	std::cout<<"4. Allocating arrays for the index, u_block_vertices and the degrees of each of size "<<h_scan_end+h_cnt_end<<"(h_scan_end+h_cnt_end)"<<std::endl;
 	CubDebugExit(cudaMalloc((void**)&d_index, sizeof(unsigned int) * (h_scan_end+h_cnt_end)));
 	CubDebugExit(cudaMalloc((void**)&d_u_block, sizeof(unsigned int) * (h_scan_end+h_cnt_end)));
 	CubDebugExit(cudaMalloc((void**)&d_E_prime_size, sizeof(unsigned int) * (h_scan_end+h_cnt_end)));
@@ -681,6 +690,15 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	UniqueUblockIndexKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<g_grid_size, BLOCK_THREADS>>>(d_out, d_scan, d_index, d_u_block, d_E_prime_size);
 	err = cudaGetLastError();
 	if (err != cudaSuccess){ printf("ERROR: UniqueUblockIndexKernel failed due to err code %d.\n", err); return std::vector<edge<unsigned int>>();}
+	// This might be required
+	cudaDeviceSynchronize();
+
+	// This is being run again as a test
+	UniqueUblockIndexKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<g_grid_size, BLOCK_THREADS>>>(d_out, d_scan, d_index, d_u_block, d_E_prime_size);
+	err = cudaGetLastError();
+	if (err != cudaSuccess){ printf("ERROR: UniqueUblockIndexKernel failed due to err code %d.\n", err); return std::vector<edge<unsigned int>>();}
+	// This might be required
+	cudaDeviceSynchronize();
 
 	if (d_cnt) CubDebugExit(cudaFree(d_cnt));
 	if (d_scan) CubDebugExit(cudaFree(d_scan));
@@ -752,6 +770,9 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	CubDebugExit(g_allocator.DeviceAllocate(&d_temp_storage, temp_storage_bytes));
 	// Run
 	CubDebugExit(DeviceScan::InclusiveSum(d_temp_storage, temp_storage_bytes, d_E_prime_size, d_E_prime_size_scan, h_scan_end+h_cnt_end));
+	// This might be required
+	cudaDeviceSynchronize();
+
 	// Free intermediate memory d_temp_storage
 	if(d_temp_storage) CubDebugExit(g_allocator.DeviceFree(d_temp_storage));
 
@@ -786,6 +807,8 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	DEIndexPopulateKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_grid, BLOCK_THREADS>>>(d_E_prime_size_scan, d_e_index, h_scan_end+h_cnt_end);
 	err = cudaGetLastError();
 	if (err != cudaSuccess){ printf("ERROR: DEIndexPopulateKernel failed due to err code %d.\n", err); return std::vector<edge<unsigned int>>();}
+	// This might be required
+	cudaDeviceSynchronize();
 
 #if 0
 	int *h_e_index;
@@ -829,6 +852,8 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	std::cout<<"Calling kernel to generate EPrime EPrimeComputeKernel..."<<std::endl;
 	//EPrimeComputeKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_gen_grid_size, BLOCK_THREADS>>>(d_index, d_e_index, d_E_prime_size_scan, h_scan_end+h_cnt_end, d_out, total_num_items, d_E_prime, d_low, d_high);
 	EPrimeComputeKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_gen_grid_size, BLOCK_THREADS>>>(d_index, d_e_index, d_E_prime_size_scan, h_scan_end+h_cnt_end, d_out, total_num_items, d_E_prime);
+	// This might be required
+	cudaDeviceSynchronize();
 	err = cudaGetLastError();
 	if (err != cudaSuccess){ printf("ERROR: EPrimeComputeKernel failed due to err code %d.\n", err); return std::vector<edge<unsigned int>>();}
 
@@ -847,10 +872,10 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 
 	// ------------------------------------------------------------------------------
 
-	std::cout<<"Copying data to h_in from d_out."<<std::endl;
+//	std::cout<<"Copying data to h_in from d_out."<<std::endl;
 	// copy data back to host
 	//CubDebugExit(cudaMemcpy(h_in, d_out, sizeof(unsigned long) * total_num_items, cudaMemcpyDeviceToHost));
-	CUDA_CHECK_RETURN(cudaMemcpy(h_in, d_out, sizeof(unsigned long) * total_num_items, cudaMemcpyDeviceToHost));
+//	CUDA_CHECK_RETURN(cudaMemcpy(h_in, d_out, sizeof(unsigned long) * total_num_items, cudaMemcpyDeviceToHost));
 	//CubDebugExit(cudaMemcpy(h_in, d_keys.Current(), sizeof(unsigned long) * total_num_items, cudaMemcpyDeviceToHost));
 #if 0
 	std::cout<<"The modified array: "<<std::endl;
@@ -909,14 +934,16 @@ int main(int argc, char* argv[])
 
 
     std::cout<<"Sorting edges in E...."<<std::endl;
-    std::vector<edge<unsigned int>> EPrime = deployKernel<128, 512>((unsigned long *)dataList.data(), (int)dataList.size());
+    std::vector<edge<unsigned int>> EPrime = deployKernel<128, 1024>((unsigned long *)dataList.data(), (int)dataList.size());
 
     std::cout<<"Length of EPrime is: "<<EPrime.size()<<std::endl;
+#if 0
     for(int i = 0; i < EPrime.size(); i++){
     	EPrime[i].print();
     	std::cout<<" ";
     }
     std::cout<<std::endl;
+#endif
 
     // Last stage - perform triangle count on E(dataList) and EPrime and divide the count found by 3 to get the final count
     // First check if we can simple sort EPrime alone
@@ -975,7 +1002,9 @@ int main(int argc, char* argv[])
 	unsigned int h_triangleCount;
 	CubDebugExit(cudaMemcpy(&h_triangleCount, d_triangleCount, sizeof(unsigned int), cudaMemcpyDeviceToHost));
 
-	std::cout<<"The final triangle count is: "<<h_triangleCount<<std::endl;
+	std::cout<<"The count is: "<<h_triangleCount<<std::endl;
+	int div_factor=3;
+	std::cout<<"The final triangle count is(count/"<<div_factor<<"): "<<h_triangleCount/div_factor<<std::endl;
 
 	return 0;
 }

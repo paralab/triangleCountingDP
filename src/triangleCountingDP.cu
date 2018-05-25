@@ -531,7 +531,7 @@ __global__ void EPrimeComputeKernel(
 }
 
 template<int BLOCK_THREADS, int ITEMS_PER_THREAD>
-std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_items){
+void deployKernel(unsigned long *h_in, int total_num_items){
 	const int TILE_SIZE = BLOCK_THREADS*ITEMS_PER_THREAD;
 	int g_grid_size = total_num_items/TILE_SIZE + 1;
 
@@ -628,7 +628,7 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	UniqueUblockCntKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<g_grid_size, BLOCK_THREADS>>>(d_out, d_cnt);
 
 	err = cudaGetLastError();
-	if (err != cudaSuccess){ printf("ERROR: UniqueUblockCntKernel failed due to err code %d.\n", err); return std::vector<edge<unsigned int>>();}
+	if (err != cudaSuccess){ printf("ERROR: UniqueUblockCntKernel failed due to err code %d.\n", err); return;}
 	// This might be required
 	cudaDeviceSynchronize();
 
@@ -689,14 +689,14 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	// Find the offsets and u_block_element values of elements
 	UniqueUblockIndexKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<g_grid_size, BLOCK_THREADS>>>(d_out, d_scan, d_index, d_u_block, d_E_prime_size);
 	err = cudaGetLastError();
-	if (err != cudaSuccess){ printf("ERROR: UniqueUblockIndexKernel failed due to err code %d.\n", err); return std::vector<edge<unsigned int>>();}
+	if (err != cudaSuccess){ printf("ERROR: UniqueUblockIndexKernel failed due to err code %d.\n", err); return;}
 	// This might be required
 	cudaDeviceSynchronize();
 
 	// This is being run again as a test
 	UniqueUblockIndexKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<g_grid_size, BLOCK_THREADS>>>(d_out, d_scan, d_index, d_u_block, d_E_prime_size);
 	err = cudaGetLastError();
-	if (err != cudaSuccess){ printf("ERROR: UniqueUblockIndexKernel failed due to err code %d.\n", err); return std::vector<edge<unsigned int>>();}
+	if (err != cudaSuccess){ printf("ERROR: UniqueUblockIndexKernel failed due to err code %d.\n", err); return;}
 	// This might be required
 	cudaDeviceSynchronize();
 
@@ -788,6 +788,10 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	std::cout<<std::endl;
 #endif
 
+
+	// ------------------------ batched for loop start ------------------------
+	unsigned int h_total_triangleCount = 0;
+
 	// Allocate memory for e_index which indicates the locations in the d_index array that each thread will read
 	// For this first compute the e_prime_gen_grid_size
 	// Get the last element of d_E_prime_size_scan which is the size of e_index
@@ -806,7 +810,7 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	std::cout<<"Calling DEIndexPopulateKernel with e_prime_grid = "<<e_prime_grid<<" E_prime_size_scan_len = "<<h_scan_end+h_cnt_end<<std::endl;
 	DEIndexPopulateKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_grid, BLOCK_THREADS>>>(d_E_prime_size_scan, d_e_index, h_scan_end+h_cnt_end);
 	err = cudaGetLastError();
-	if (err != cudaSuccess){ printf("ERROR: DEIndexPopulateKernel failed due to err code %d.\n", err); return std::vector<edge<unsigned int>>();}
+	if (err != cudaSuccess){ printf("ERROR: DEIndexPopulateKernel failed due to err code %d.\n", err); return;}
 	// This might be required
 	cudaDeviceSynchronize();
 
@@ -855,7 +859,7 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	// This might be required
 	cudaDeviceSynchronize();
 	err = cudaGetLastError();
-	if (err != cudaSuccess){ printf("ERROR: EPrimeComputeKernel failed due to err code %d.\n", err); return std::vector<edge<unsigned int>>();}
+	if (err != cudaSuccess){ printf("ERROR: EPrimeComputeKernel failed due to err code %d.\n", err); return;}
 
 
 #if 0
@@ -887,19 +891,64 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	if (d_cnt) CubDebugExit(cudaFree(d_cnt));
 #endif
 
-	std::cout<<"Copying into h_E_prime from d_E_prime."<<std::endl;
-	unsigned long *h_E_prime;
-	h_E_prime = new unsigned long[h_e_prime_scan_end];
-	CubDebugExit(cudaMemcpy(h_E_prime, d_E_prime, sizeof(unsigned long)*h_e_prime_scan_end, cudaMemcpyDeviceToHost));
-	std::vector<edge<unsigned int>> E_prime((edge<unsigned int> *)h_E_prime, (edge<unsigned int> *)h_E_prime+h_e_prime_scan_end);
+
+
+    // Last stage - perform triangle count on E(dataList) and EPrime and divide the count found by 3 to get the final count
+    // First check if we can simple sort EPrime alone
+	unsigned long *d_E_Prime = d_E_prime;
+	unsigned long *d_E_Prime_sorted = NULL;
+	unsigned int *d_num_elems_ep, *d_offsets_ep, *d_bitnum_beg;
+	int h_bitnum_beg[1] = {(sizeof(unsigned long) * 8) - 1};
+	unsigned int EPrimeSize = h_e_prime_scan_end;
+
+	//CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime, sizeof(unsigned long) * EPrime.size()));
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime_sorted, sizeof(unsigned long) * EPrimeSize));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems_ep, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets_ep, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_bitnum_beg, sizeof(unsigned int)));
+
+	//CUDA_CHECK_RETURN(cudaMemcpy(d_E_Prime, EPrime.data(), sizeof(unsigned long) * EPrime.size(), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems_ep, &EPrimeSize, sizeof(unsigned int), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets_ep, 0, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_bitnum_beg, h_bitnum_beg, sizeof(unsigned int), cudaMemcpyHostToDevice));
+
+	unsigned long *d_E = d_in;
+	unsigned long *d_E_sorted = NULL;
+	unsigned int *d_num_elems, *d_offsets;
+	unsigned int ESize = total_num_items;
+
+	//CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E, sizeof(unsigned long) * ESize));
+	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_sorted, sizeof(unsigned long) * ESize));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets, sizeof(unsigned int)));
+
+	//CUDA_CHECK_RETURN(cudaMemcpy(d_E, dataList.data(), sizeof(unsigned long) * ESize, cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems, &ESize, sizeof(unsigned int), cudaMemcpyHostToDevice));
+	CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets, 0, sizeof(unsigned int)));
+
+	unsigned int *d_triangleCount;
+	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_triangleCount, sizeof(unsigned int)));
+	CUDA_CHECK_RETURN(cudaMemset((void * )d_triangleCount, 0, sizeof(unsigned int)));
+
+	//radixSort<unsigned long, 128, 1024, 16><<<1, 1>>>(d_E_Prime, d_E_Prime_sorted, d_num_elems, d_offsets, d_bitnum_beg);
+	radixSort<unsigned  long, BLOCK_THREADS, ITEMS_PER_THREAD, 16><<<1, 1>>>(d_E, d_E_sorted, d_num_elems, d_offsets, d_E_Prime, d_E_Prime_sorted, d_num_elems_ep, d_offsets_ep, d_triangleCount, d_bitnum_beg);
+
+	unsigned int h_triangleCount;
+	CubDebugExit(cudaMemcpy(&h_triangleCount, d_triangleCount, sizeof(unsigned int), cudaMemcpyDeviceToHost));
+
+	std::cout<<"The count is: "<<h_triangleCount<<std::endl;
+	int div_factor=3;
+	std::cout<<"The final triangle count is(count/"<<div_factor<<"): "<<h_triangleCount/div_factor<<std::endl;
+
+	// ------------------------ batched for loop end ------------------------
+
+	h_total_triangleCount += h_triangleCount;
 
 	if (d_in) CubDebugExit(cudaFree(d_in));
-	//std::cout<<"Deleting d_out..."<<std::endl;
-	//if (d_out) CubDebugExit(cudaFree(d_out));
 	if (d_E_prime) CubDebugExit(cudaFree(d_E_prime));
 	if (d_key_alt_buf) CubDebugExit(cudaFree(d_key_alt_buf));
 
-	return E_prime;
+	return;
 }
 
 int main(int argc, char* argv[])
@@ -916,6 +965,8 @@ int main(int argc, char* argv[])
                 break;
         }
     }
+
+    CUDA_CHECK_RETURN(cudaDeviceSetLimit(cudaLimitDevRuntimeSyncDepth, 16));
 
     // First read in the data file into memory and perform bucket sort on the first member u of the file
     // Creating an object of CSVWriter
@@ -934,9 +985,9 @@ int main(int argc, char* argv[])
 
 
     std::cout<<"Sorting edges in E...."<<std::endl;
-    std::vector<edge<unsigned int>> EPrime = deployKernel<128, 1024>((unsigned long *)dataList.data(), (int)dataList.size());
+    deployKernel<128, 1024>((unsigned long *)dataList.data(), (int)dataList.size());
 
-    std::cout<<"Length of EPrime is: "<<EPrime.size()<<std::endl;
+    //std::cout<<"Length of EPrime is: "<<EPrime.size()<<std::endl;
 #if 0
     for(int i = 0; i < EPrime.size(); i++){
     	EPrime[i].print();
@@ -944,67 +995,6 @@ int main(int argc, char* argv[])
     }
     std::cout<<std::endl;
 #endif
-
-    // Last stage - perform triangle count on E(dataList) and EPrime and divide the count found by 3 to get the final count
-    // First check if we can simple sort EPrime alone
-	unsigned long *d_E_Prime = NULL;
-	unsigned long *d_E_Prime_sorted = NULL;
-	unsigned int *d_num_elems_ep, *d_offsets_ep, *d_bitnum_beg;
-	int h_bitnum_beg[1] = {(sizeof(unsigned long) * 8) - 1};
-	unsigned int EPrimeSize = EPrime.size();
-
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime, sizeof(unsigned long) * EPrime.size()));
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime_sorted, sizeof(unsigned long) * EPrime.size()));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems_ep, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets_ep, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_bitnum_beg, sizeof(unsigned int)));
-
-	CUDA_CHECK_RETURN(cudaMemcpy(d_E_Prime, EPrime.data(), sizeof(unsigned long) * EPrime.size(), cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems_ep, &EPrimeSize, sizeof(unsigned int), cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets_ep, 0, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_bitnum_beg, h_bitnum_beg, sizeof(unsigned int), cudaMemcpyHostToDevice));
-
-	unsigned long *d_E = NULL;
-	unsigned long *d_E_sorted = NULL;
-	unsigned int *d_num_elems, *d_offsets;
-	unsigned int ESize = dataList.size();
-
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E, sizeof(unsigned long) * ESize));
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_sorted, sizeof(unsigned long) * ESize));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets, sizeof(unsigned int)));
-
-	CUDA_CHECK_RETURN(cudaMemcpy(d_E, dataList.data(), sizeof(unsigned long) * ESize, cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems, &ESize, sizeof(unsigned int), cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets, 0, sizeof(unsigned int)));
-
-	unsigned int *d_triangleCount;
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_triangleCount, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMemset((void * )d_triangleCount, 0, sizeof(unsigned int)));
-
-	CUDA_CHECK_RETURN(cudaDeviceSetLimit(cudaLimitDevRuntimeSyncDepth, 14));
-
-	//radixSort<unsigned long, 128, 1024, 16><<<1, 1>>>(d_E_Prime, d_E_Prime_sorted, d_num_elems, d_offsets, d_bitnum_beg);
-	radixSort<unsigned  long, 128, 1024, 16><<<1, 1>>>(d_E, d_E_sorted, d_num_elems, d_offsets, d_E_Prime, d_E_Prime_sorted, d_num_elems_ep, d_offsets_ep, d_triangleCount, d_bitnum_beg);
-
-//	unsigned long *h_E_Prime_sorted;
-//	h_E_Prime_sorted = new unsigned long[EPrimeSize];
-//	CubDebugExit(cudaMemcpy(h_E_Prime_sorted, d_E_Prime_sorted, sizeof(unsigned long) * EPrimeSize, cudaMemcpyDeviceToHost));
-//	edge<unsigned int> *p;
-//	p = (edge<unsigned int> *)h_E_Prime_sorted;
-//	std::cout<<"Sorted EPrime is: "<<EPrime.size()<<std::endl;
-//	for(int i = 0; i < EPrimeSize; i++){
-//		p[i].print();
-//		std::cout<<" ";
-//	}
-//	std::cout<<std::endl;
-
-	unsigned int h_triangleCount;
-	CubDebugExit(cudaMemcpy(&h_triangleCount, d_triangleCount, sizeof(unsigned int), cudaMemcpyDeviceToHost));
-
-	std::cout<<"The count is: "<<h_triangleCount<<std::endl;
-	int div_factor=3;
-	std::cout<<"The final triangle count is(count/"<<div_factor<<"): "<<h_triangleCount/div_factor<<std::endl;
 
 	return 0;
 }

@@ -776,11 +776,12 @@ void deployKernel(unsigned long *h_in, int total_num_items){
 	// Free intermediate memory d_temp_storage
 	if(d_temp_storage) CubDebugExit(g_allocator.DeviceFree(d_temp_storage));
 
-#if 0
+
 	unsigned int *h_E_prime_size_scan;
 	h_E_prime_size_scan = new unsigned int[h_scan_end+h_cnt_end];
 	// debug copy stuff to host - check result of InclusiveSum
 	CubDebugExit(cudaMemcpy(h_E_prime_size_scan, d_E_prime_size_scan, sizeof(unsigned int) * (h_scan_end+h_cnt_end), cudaMemcpyDeviceToHost));
+#if 0
 	std::cout<<"The E prime size scan array of size "<<h_scan_end+h_cnt_end<<" is: "<<std::endl;
 	for(int i = 0; i < h_scan_end+h_cnt_end; i++){
 		std::cout<<h_E_prime_size_scan[i]<<" ";
@@ -791,161 +792,177 @@ void deployKernel(unsigned long *h_in, int total_num_items){
 
 	// ------------------------ batched for loop start ------------------------
 	unsigned int h_total_triangleCount = 0;
+	unsigned int batch_back = 0, batch_front = 0;
+	unsigned int batch_size = 9120350;
 
-	// Allocate memory for e_index which indicates the locations in the d_index array that each thread will read
-	// For this first compute the e_prime_gen_grid_size
-	// Get the last element of d_E_prime_size_scan which is the size of e_index
-	unsigned int h_e_prime_scan_end;
-	// to compute the array size we need to copy over the data from the device
-	CubDebugExit(cudaMemcpy(&h_e_prime_scan_end, &d_E_prime_size_scan[h_scan_end+h_cnt_end-1], sizeof(unsigned int), cudaMemcpyDeviceToHost));
-	unsigned int e_prime_gen_grid_size = h_e_prime_scan_end/TILE_SIZE + 1;
-	std::cout<<"Allocating memory of size "<<BLOCK_THREADS*e_prime_gen_grid_size<<" for the d_e_index..."<<std::endl;
-	std::cout<<"h_e_prime_scan_end = "<<h_e_prime_scan_end<<" e_prime_gen_grid_size = "<<e_prime_gen_grid_size<<std::endl;
-	int *d_e_index = NULL;
-	CubDebugExit(cudaMalloc((void**)&d_e_index, sizeof(int) * (BLOCK_THREADS*e_prime_gen_grid_size)));
-	CubDebugExit(cudaMemset(d_e_index, -1, sizeof(int) * (BLOCK_THREADS* e_prime_gen_grid_size)));
+	while(batch_back < h_scan_end+h_cnt_end){
+		// Compute the endpoints in the arrays d_E_prime_size_scan and d_index
+		while(batch_front < h_scan_end+h_cnt_end && ((h_E_prime_size_scan[batch_front]-h_E_prime_size_scan[batch_back]) < batch_size)){
+			batch_front++;
+		}
 
-	// With a new grid e_prime_grid on the array E_prime_size_scan populate the d_e_index array
-	unsigned int e_prime_grid = (h_scan_end+h_cnt_end)/TILE_SIZE + 1;
-	std::cout<<"Calling DEIndexPopulateKernel with e_prime_grid = "<<e_prime_grid<<" E_prime_size_scan_len = "<<h_scan_end+h_cnt_end<<std::endl;
-	DEIndexPopulateKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_grid, BLOCK_THREADS>>>(d_E_prime_size_scan, d_e_index, h_scan_end+h_cnt_end);
-	err = cudaGetLastError();
-	if (err != cudaSuccess){ printf("ERROR: DEIndexPopulateKernel failed due to err code %d.\n", err); return;}
-	// This might be required
-	cudaDeviceSynchronize();
+		// Allocate memory for e_index which indicates the locations in the d_index array that each thread will read
+		// For this first compute the e_prime_gen_grid_size
+		// Get the last element of d_E_prime_size_scan which is the size of e_index
+		//unsigned int h_e_prime_scan_end;
+		// to compute the array size we need to copy over the data from the device
+		//CubDebugExit(cudaMemcpy(&h_e_prime_scan_end, &d_E_prime_size_scan[h_scan_end+h_cnt_end-1], sizeof(unsigned int), cudaMemcpyDeviceToHost));
+		//unsigned int e_prime_gen_grid_size = h_e_prime_scan_end/TILE_SIZE + 1;
+		unsigned int e_prime_gen_grid_size = (h_E_prime_size_scan[batch_front-1]-((batch_back == 0) ? 0:h_E_prime_size_scan[batch_back-1]))/TILE_SIZE + 1;
+		std::cout<<"Allocating memory of size "<<BLOCK_THREADS*e_prime_gen_grid_size<<" for the d_e_index..."<<std::endl;
+		std::cout<<"h_e_prime_scan_end = "<<(h_E_prime_size_scan[batch_front-1]-((batch_back == 0) ? 0:h_E_prime_size_scan[batch_back-1]))<<" e_prime_gen_grid_size = "<<e_prime_gen_grid_size<<std::endl;
+		int *d_e_index = NULL;
+		CubDebugExit(cudaMalloc((void**)&d_e_index, sizeof(int) * (BLOCK_THREADS*e_prime_gen_grid_size)));
+		CubDebugExit(cudaMemset(d_e_index, -1, sizeof(int) * (BLOCK_THREADS* e_prime_gen_grid_size)));
 
-#if 0
-	int *h_e_index;
-	h_e_index = new int[BLOCK_THREADS*e_prime_gen_grid_size];
-	// debug copy stuff to host - check the result of DEIndexPopulateKernel
-	CubDebugExit(cudaMemcpy(h_e_index, d_e_index, sizeof(int) * (BLOCK_THREADS*e_prime_gen_grid_size), cudaMemcpyDeviceToHost));
-	std::cout<<"The e_index array of size "<<BLOCK_THREADS*e_prime_gen_grid_size<<" is: "<<std::endl;
-	for(int i = 0; i < BLOCK_THREADS*e_prime_gen_grid_size; i++){
-		std::cout<<h_e_index[i]<<" ";
-	}
-	std::cout<<std::endl;
-#endif
-
-	// find all the combinations - this may later have to be done in consecutive batches
-	// 6. Allocate the memory for generating the combinations. TODO: If this memory is out of bounds we may have to batch
-	//    the creation.
-	//    h_e_prime_scan_end = d_E_prime_size_scan[-1]  is the amount of memory required
-	//    d_E_prime
-	// 7. Compute the combinations in a kernel with <<<e_prime_gen_grid, BLOCK_THREADS>>> each thread:
-	//    reads from e_index[threadNumber]. if it is -1 do nothing and exit.
-	//    find the next e_index[threadNumber+...] != -1 with a linear search. Stop search if threadNum+...>=e_index_len
-	//    These are index bounds index_low and index_high used to read from the index array
-	//    for i of each vertex u in the index array find d_out bounds:
-	//       u_low = index[i]
-	//       u_high = index[i+1] - make sure i+1 is not out of bounds
-	//       u_write_low = d_E_prime_size_scan[i-1] - make sure that this is not out of bounds
-	//       u_write_high = d_E_prime_size_scan[i]
-	//       scan_write = U_write_low
-	//       for i in d_out[u_low:u_high]:
-	//          for j in d_out[u_low+1:u_high]
-	//             new_edge = edge(u=i,v=j)
-	//             assert(scan_write > u_write_high)
-	//             d_E_prime[scan_write] = new_edge
-	//             scan_write++
-	unsigned long *d_E_prime = NULL;
-	std::cout<<"Allocating memory of size "<<h_e_prime_scan_end<<" for the d_E_prime"<<std::endl;
-	CubDebugExit(cudaMalloc((void**)&d_E_prime, sizeof(unsigned long)*h_e_prime_scan_end));
-	std::cout<<"This might fail if its too large. If so you need to batch creation of E_prime. "<<std::endl;
-	CubDebugExit(cudaMemset(d_E_prime, 0, sizeof(unsigned long)*h_e_prime_scan_end));
-
-	std::cout<<"Calling kernel to generate EPrime EPrimeComputeKernel..."<<std::endl;
-	//EPrimeComputeKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_gen_grid_size, BLOCK_THREADS>>>(d_index, d_e_index, d_E_prime_size_scan, h_scan_end+h_cnt_end, d_out, total_num_items, d_E_prime, d_low, d_high);
-	EPrimeComputeKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_gen_grid_size, BLOCK_THREADS>>>(d_index, d_e_index, d_E_prime_size_scan, h_scan_end+h_cnt_end, d_out, total_num_items, d_E_prime);
-	// This might be required
-	cudaDeviceSynchronize();
-	err = cudaGetLastError();
-	if (err != cudaSuccess){ printf("ERROR: EPrimeComputeKernel failed due to err code %d.\n", err); return;}
-
+		// With a new grid e_prime_grid on the array E_prime_size_scan populate the d_e_index array
+		//unsigned int e_prime_grid = (h_scan_end+h_cnt_end)/TILE_SIZE + 1;
+		unsigned int e_prime_grid = (batch_front-batch_back)/TILE_SIZE + 1;
+		//std::cout<<"Calling DEIndexPopulateKernel with e_prime_grid = "<<e_prime_grid<<" E_prime_size_scan_len = "<<h_scan_end+h_cnt_end<<std::endl;
+		std::cout<<"Calling DEIndexPopulateKernel with e_prime_grid = "<<e_prime_grid<<" E_prime_size_scan_len = "<<batch_front-batch_back<<std::endl;
+		//DEIndexPopulateKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_grid, BLOCK_THREADS>>>(d_E_prime_size_scan, d_e_index, h_scan_end+h_cnt_end);
+		DEIndexPopulateKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_grid, BLOCK_THREADS>>>(d_E_prime_size_scan, d_e_index, batch_front-batch_back);
+		err = cudaGetLastError();
+		if (err != cudaSuccess){ printf("ERROR: DEIndexPopulateKernel failed due to err code %d.\n", err); return;}
+		// This might be required
+		cudaDeviceSynchronize();
 
 #if 0
-	unsigned long *h_E_prime;
-	h_E_prime = new unsigned long[h_e_prime_scan_end];
-	CubDebugExit(cudaMemcpy(h_E_prime, d_E_prime, sizeof(unsigned long)*h_e_prime_scan_end, cudaMemcpyDeviceToHost));
-	std::cout<<"The d_E_prime array of size "<<h_e_prime_scan_end<<" is: "<<std::endl;
-	for(unsigned int i = 0; i < h_e_prime_scan_end; i++){
-		((edge<unsigned int> *)(&h_E_prime[i]))->print();
-		std::cout<<" ";
-	}
-	std::cout<<std::endl;
-#endif
-
-	// ------------------------------------------------------------------------------
-
-//	std::cout<<"Copying data to h_in from d_out."<<std::endl;
-	// copy data back to host
-	//CubDebugExit(cudaMemcpy(h_in, d_out, sizeof(unsigned long) * total_num_items, cudaMemcpyDeviceToHost));
-//	CUDA_CHECK_RETURN(cudaMemcpy(h_in, d_out, sizeof(unsigned long) * total_num_items, cudaMemcpyDeviceToHost));
-	//CubDebugExit(cudaMemcpy(h_in, d_keys.Current(), sizeof(unsigned long) * total_num_items, cudaMemcpyDeviceToHost));
-#if 0
-	std::cout<<"The modified array: "<<std::endl;
-	for(int i = 0; i < total_num_items; i++){
-		p[i].print();
+		int *h_e_index;
+		h_e_index = new int[BLOCK_THREADS*e_prime_gen_grid_size];
+		// debug copy stuff to host - check the result of DEIndexPopulateKernel
+		CubDebugExit(cudaMemcpy(h_e_index, d_e_index, sizeof(int) * (BLOCK_THREADS*e_prime_gen_grid_size), cudaMemcpyDeviceToHost));
+		std::cout<<"The e_index array of size "<<BLOCK_THREADS*e_prime_gen_grid_size<<" is: "<<std::endl;
+		for(int i = 0; i < BLOCK_THREADS*e_prime_gen_grid_size; i++){
+			std::cout<<h_e_index[i]<<" ";
+		}
 		std::cout<<std::endl;
-	}
+#endif
 
-	if (d_cnt) CubDebugExit(cudaFree(d_cnt));
+		// find all the combinations - this may later have to be done in consecutive batches
+		// 6. Allocate the memory for generating the combinations. TODO: If this memory is out of bounds we may have to batch
+		//    the creation.
+		//    h_e_prime_scan_end = d_E_prime_size_scan[-1]  is the amount of memory required
+		//    d_E_prime
+		// 7. Compute the combinations in a kernel with <<<e_prime_gen_grid, BLOCK_THREADS>>> each thread:
+		//    reads from e_index[threadNumber]. if it is -1 do nothing and exit.
+		//    find the next e_index[threadNumber+...] != -1 with a linear search. Stop search if threadNum+...>=e_index_len
+		//    These are index bounds index_low and index_high used to read from the index array
+		//    for i of each vertex u in the index array find d_out bounds:
+		//       u_low = index[i]
+		//       u_high = index[i+1] - make sure i+1 is not out of bounds
+		//       u_write_low = d_E_prime_size_scan[i-1] - make sure that this is not out of bounds
+		//       u_write_high = d_E_prime_size_scan[i]
+		//       scan_write = U_write_low
+		//       for i in d_out[u_low:u_high]:
+		//          for j in d_out[u_low+1:u_high]
+		//             new_edge = edge(u=i,v=j)
+		//             assert(scan_write > u_write_high)
+		//             d_E_prime[scan_write] = new_edge
+		//             scan_write++
+		unsigned long *d_E_prime = NULL;
+		std::cout<<"Allocating memory of size "<<h_e_prime_scan_end<<" for the d_E_prime"<<std::endl;
+		CubDebugExit(cudaMalloc((void**)&d_E_prime, sizeof(unsigned long)*h_e_prime_scan_end));
+		std::cout<<"This might fail if its too large. If so you need to batch creation of E_prime. "<<std::endl;
+		CubDebugExit(cudaMemset(d_E_prime, 0, sizeof(unsigned long)*h_e_prime_scan_end));
+
+		std::cout<<"Calling kernel to generate EPrime EPrimeComputeKernel..."<<std::endl;
+		//EPrimeComputeKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_gen_grid_size, BLOCK_THREADS>>>(d_index, d_e_index, d_E_prime_size_scan, h_scan_end+h_cnt_end, d_out, total_num_items, d_E_prime, d_low, d_high);
+		EPrimeComputeKernel<unsigned long, BLOCK_THREADS, ITEMS_PER_THREAD><<<e_prime_gen_grid_size, BLOCK_THREADS>>>(d_index, d_e_index, d_E_prime_size_scan, h_scan_end+h_cnt_end, d_out, total_num_items, d_E_prime);
+		// This might be required
+		cudaDeviceSynchronize();
+		err = cudaGetLastError();
+		if (err != cudaSuccess){ printf("ERROR: EPrimeComputeKernel failed due to err code %d.\n", err); return;}
+
+
+#if 0
+		unsigned long *h_E_prime;
+		h_E_prime = new unsigned long[h_e_prime_scan_end];
+		CubDebugExit(cudaMemcpy(h_E_prime, d_E_prime, sizeof(unsigned long)*h_e_prime_scan_end, cudaMemcpyDeviceToHost));
+		std::cout<<"The d_E_prime array of size "<<h_e_prime_scan_end<<" is: "<<std::endl;
+		for(unsigned int i = 0; i < h_e_prime_scan_end; i++){
+			((edge<unsigned int> *)(&h_E_prime[i]))->print();
+			std::cout<<" ";
+		}
+		std::cout<<std::endl;
+#endif
+
+		// ------------------------------------------------------------------------------
+
+	//	std::cout<<"Copying data to h_in from d_out."<<std::endl;
+		// copy data back to host
+		//CubDebugExit(cudaMemcpy(h_in, d_out, sizeof(unsigned long) * total_num_items, cudaMemcpyDeviceToHost));
+	//	CUDA_CHECK_RETURN(cudaMemcpy(h_in, d_out, sizeof(unsigned long) * total_num_items, cudaMemcpyDeviceToHost));
+		//CubDebugExit(cudaMemcpy(h_in, d_keys.Current(), sizeof(unsigned long) * total_num_items, cudaMemcpyDeviceToHost));
+#if 0
+		std::cout<<"The modified array: "<<std::endl;
+		for(int i = 0; i < total_num_items; i++){
+			p[i].print();
+			std::cout<<std::endl;
+		}
+
+		if (d_cnt) CubDebugExit(cudaFree(d_cnt));
 #endif
 
 
 
-    // Last stage - perform triangle count on E(dataList) and EPrime and divide the count found by 3 to get the final count
-    // First check if we can simple sort EPrime alone
-	unsigned long *d_E_Prime = d_E_prime;
-	unsigned long *d_E_Prime_sorted = NULL;
-	unsigned int *d_num_elems_ep, *d_offsets_ep, *d_bitnum_beg;
-	int h_bitnum_beg[1] = {(sizeof(unsigned long) * 8) - 1};
-	unsigned int EPrimeSize = h_e_prime_scan_end;
+		// Last stage - perform triangle count on E(dataList) and EPrime and divide the count found by 3 to get the final count
+		// First check if we can simple sort EPrime alone
+		unsigned long *d_E_Prime = d_E_prime;
+		unsigned long *d_E_Prime_sorted = NULL;
+		unsigned int *d_num_elems_ep, *d_offsets_ep, *d_bitnum_beg;
+		int h_bitnum_beg[1] = {(sizeof(unsigned long) * 8) - 1};
+		unsigned int EPrimeSize = h_e_prime_scan_end;
 
-	//CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime, sizeof(unsigned long) * EPrime.size()));
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime_sorted, sizeof(unsigned long) * EPrimeSize));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems_ep, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets_ep, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_bitnum_beg, sizeof(unsigned int)));
+		//CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime, sizeof(unsigned long) * EPrime.size()));
+		CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_Prime_sorted, sizeof(unsigned long) * EPrimeSize));
+		CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems_ep, sizeof(unsigned int)));
+		CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets_ep, sizeof(unsigned int)));
+		CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_bitnum_beg, sizeof(unsigned int)));
 
-	//CUDA_CHECK_RETURN(cudaMemcpy(d_E_Prime, EPrime.data(), sizeof(unsigned long) * EPrime.size(), cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems_ep, &EPrimeSize, sizeof(unsigned int), cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets_ep, 0, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_bitnum_beg, h_bitnum_beg, sizeof(unsigned int), cudaMemcpyHostToDevice));
+		//CUDA_CHECK_RETURN(cudaMemcpy(d_E_Prime, EPrime.data(), sizeof(unsigned long) * EPrime.size(), cudaMemcpyHostToDevice));
+		CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems_ep, &EPrimeSize, sizeof(unsigned int), cudaMemcpyHostToDevice));
+		CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets_ep, 0, sizeof(unsigned int)));
+		CUDA_CHECK_RETURN(cudaMemcpy((void * )d_bitnum_beg, h_bitnum_beg, sizeof(unsigned int), cudaMemcpyHostToDevice));
 
-	unsigned long *d_E = d_in;
-	unsigned long *d_E_sorted = NULL;
-	unsigned int *d_num_elems, *d_offsets;
-	unsigned int ESize = total_num_items;
+		unsigned long *d_E = d_in;
+		unsigned long *d_E_sorted = NULL;
+		unsigned int *d_num_elems, *d_offsets;
+		unsigned int ESize = total_num_items;
 
-	//CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E, sizeof(unsigned long) * ESize));
-	CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_sorted, sizeof(unsigned long) * ESize));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets, sizeof(unsigned int)));
+		//CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E, sizeof(unsigned long) * ESize));
+		CUDA_CHECK_RETURN(cudaMalloc((void**)&d_E_sorted, sizeof(unsigned long) * ESize));
+		CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_num_elems, sizeof(unsigned int)));
+		CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_offsets, sizeof(unsigned int)));
 
-	//CUDA_CHECK_RETURN(cudaMemcpy(d_E, dataList.data(), sizeof(unsigned long) * ESize, cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems, &ESize, sizeof(unsigned int), cudaMemcpyHostToDevice));
-	CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets, 0, sizeof(unsigned int)));
+		//CUDA_CHECK_RETURN(cudaMemcpy(d_E, dataList.data(), sizeof(unsigned long) * ESize, cudaMemcpyHostToDevice));
+		CUDA_CHECK_RETURN(cudaMemcpy((void * )d_num_elems, &ESize, sizeof(unsigned int), cudaMemcpyHostToDevice));
+		CUDA_CHECK_RETURN(cudaMemset((void * )d_offsets, 0, sizeof(unsigned int)));
 
-	unsigned int *d_triangleCount;
-	CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_triangleCount, sizeof(unsigned int)));
-	CUDA_CHECK_RETURN(cudaMemset((void * )d_triangleCount, 0, sizeof(unsigned int)));
+		unsigned int *d_triangleCount;
+		CUDA_CHECK_RETURN(cudaMalloc((void ** )&d_triangleCount, sizeof(unsigned int)));
+		CUDA_CHECK_RETURN(cudaMemset((void * )d_triangleCount, 0, sizeof(unsigned int)));
 
-	//radixSort<unsigned long, 128, 1024, 16><<<1, 1>>>(d_E_Prime, d_E_Prime_sorted, d_num_elems, d_offsets, d_bitnum_beg);
-	radixSort<unsigned  long, BLOCK_THREADS, ITEMS_PER_THREAD, 16><<<1, 1>>>(d_E, d_E_sorted, d_num_elems, d_offsets, d_E_Prime, d_E_Prime_sorted, d_num_elems_ep, d_offsets_ep, d_triangleCount, d_bitnum_beg);
+		//radixSort<unsigned long, 128, 1024, 16><<<1, 1>>>(d_E_Prime, d_E_Prime_sorted, d_num_elems, d_offsets, d_bitnum_beg);
+		radixSort<unsigned  long, BLOCK_THREADS, ITEMS_PER_THREAD, 16><<<1, 1>>>(d_E, d_E_sorted, d_num_elems, d_offsets, d_E_Prime, d_E_Prime_sorted, d_num_elems_ep, d_offsets_ep, d_triangleCount, d_bitnum_beg);
 
-	unsigned int h_triangleCount;
-	CubDebugExit(cudaMemcpy(&h_triangleCount, d_triangleCount, sizeof(unsigned int), cudaMemcpyDeviceToHost));
+		unsigned int h_triangleCount;
+		CubDebugExit(cudaMemcpy(&h_triangleCount, d_triangleCount, sizeof(unsigned int), cudaMemcpyDeviceToHost));
 
-	std::cout<<"The count is: "<<h_triangleCount<<std::endl;
-	int div_factor=3;
-	std::cout<<"The final triangle count is(count/"<<div_factor<<"): "<<h_triangleCount/div_factor<<std::endl;
+		std::cout<<"The count is: "<<h_triangleCount<<std::endl;
+		int div_factor=3;
+		std::cout<<"The final triangle count is(count/"<<div_factor<<"): "<<h_triangleCount/div_factor<<std::endl;
 
-	// ------------------------ batched for loop end ------------------------
+		// ------------------------ batched for loop end ------------------------
 
-	h_total_triangleCount += h_triangleCount;
+		h_total_triangleCount += h_triangleCount;
 
+		if (d_E_prime) CubDebugExit(cudaFree(d_E_prime));
+
+
+		batch_back = batch_front;
+	}
 	if (d_in) CubDebugExit(cudaFree(d_in));
-	if (d_E_prime) CubDebugExit(cudaFree(d_E_prime));
 	if (d_key_alt_buf) CubDebugExit(cudaFree(d_key_alt_buf));
 
 	return;

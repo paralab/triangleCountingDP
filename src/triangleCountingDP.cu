@@ -740,7 +740,7 @@ std::vector<edge<unsigned int>> deployKernel(unsigned long *h_in, int total_num_
 	//    index   		[0 3 5 8 10 11 13 14]
 	//    u_block 		[1 2 3 4  5  6  7  8]
 	//    degree  		[3 2 3 2  1  2  1  0]
-	//    E_prime_size  	[3 1 3 1  0  1  0  0]
+	//    E_prime_size 	[3 1 3 1  0  1  0  0]
 	// 2. Scan sum the size array inclusive
 	//    E_prime_size_scan	[3 4 7 8  8  9  9  9]
 	// 3. Create a new grid based on the number of elements in the E_prime_scan array
